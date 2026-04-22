@@ -33,6 +33,11 @@
             {{ f.label }}
           </button>
         </nav>
+        <nav
+          class="todo-app__filters"
+          role="tablist"
+          aria-label="筛选待办"
+        ></nav>
 
         <p class="todo-app__storage-hint">
           数据保存在浏览器
@@ -46,13 +51,13 @@
             v-for="todo in filteredTodos"
             :key="todo.id"
             :todo="todo"
-            @toggle="toggle"
-            @move="move"
-            @delete="remove"
+            @toggle="store.toggle"
+            @move="store.move"
+            @delete="store.remove"
           />
         </ul>
 
-        <p v-if="todos.length === 0" class="todo-app__empty-hint">
+        <p v-if="store.todos.length === 0" class="todo-app__empty-hint">
           暂无待办，输入后点击添加
         </p>
         <p v-else-if="filteredTodos.length === 0" class="todo-app__empty-hint">
@@ -66,10 +71,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
 import Sortable from "sortablejs";
-import useStorage from "@/composables/useStorage";
+import { useTodoStore } from "@/stores/todos";
 import TodoItem from "@/components/TodoItem.vue";
-
-const { todos, add, toggle, move, remove, reorder } = useStorage();
+const store = useTodoStore();
 const newTodo = ref("");
 const listRef = ref<HTMLElement | null>(null);
 let sortableInstance: Sortable | null = null;
@@ -82,59 +86,47 @@ const filters = [
 ];
 
 const filteredTodos = computed(() => {
-  if (currentFilter.value === "active")
-    return todos.value.filter((t) => !t.completed);
-  if (currentFilter.value === "completed")
-    return todos.value.filter((t) => t.completed);
-  return todos.value;
+  if (currentFilter.value === "active") return store.activeTodos;
+  if (currentFilter.value === "completed") return store.completedTodos;
+  return store.todos;
 });
 
 const onAdd = (e: Event) => {
   e.preventDefault();
   const text = newTodo.value.trim();
   if (!text) return;
-  add(text);
+  store.add(text);
   newTodo.value = "";
 };
 
-// 初始化 Sortable
 const initSortable = () => {
   if (!listRef.value) return;
   if (sortableInstance) sortableInstance.destroy();
 
   sortableInstance = new Sortable(listRef.value, {
     animation: 150,
-    handle: ".todo-item__grip", // 只有 grip 可拖拽
+    handle: ".todo-item__grip",
     ghostClass: "sortable-ghost",
     dragClass: "sortable-drag",
-    disabled: currentFilter.value !== "all", // 筛选模式下禁用拖拽
+    disabled: currentFilter.value !== "all",
     onEnd: (evt) => {
       const { oldIndex, newIndex } = evt;
       if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
-      const all = [...todos.value];
+      const all = [...store.todos];
       const [moved] = all.splice(oldIndex, 1);
       all.splice(newIndex, 0, moved!);
-      reorder(all);
+      store.reorder(all);
     },
   });
 };
 
-// 筛选变化时重新初始化（禁用/启用拖拽）
-watch(currentFilter, () => {
-  initSortable();
-});
-
-// 数据变化后重新初始化（DOM 更新后）
+watch(currentFilter, initSortable);
 watch(
-  () => todos.value.length,
-  () => {
-    requestAnimationFrame(initSortable);
-  },
+  () => store.todos.length,
+  () => requestAnimationFrame(initSortable),
 );
 
-onMounted(() => {
-  initSortable();
-});
+onMounted(initSortable);
 </script>
 
 <style scoped>
@@ -271,5 +263,61 @@ onMounted(() => {
   color: var(--muted);
   font-size: 14px;
   padding: 24px 0;
+}
+.todo-app__ai-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.todo-app__key-row {
+  display: flex;
+  gap: 8px;
+}
+.todo-app__key-input {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--slate-200);
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+.todo-app__key-input:focus {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+  border-color: var(--indigo-600);
+}
+.todo-app__key-save {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--indigo-600);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.todo-app__key-save:hover {
+  background: var(--indigo-700);
+}
+.todo-app__key-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.todo-app__key-change {
+  background: none;
+  border: none;
+  color: var(--indigo-600);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
 }
 </style>
